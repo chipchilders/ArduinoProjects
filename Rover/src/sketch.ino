@@ -60,6 +60,12 @@ void right()
      digitalWrite(pinI2,HIGH);//turn DC Motor A move clockwise
      digitalWrite(pinI1,LOW);
 }
+void straight()
+{
+    analogWrite(speedpinA,spead);//input a simulation value to set the speed
+    digitalWrite(pinI2,LOW);//turn DC Motor A move clockwise
+    digitalWrite(pinI1,LOW);
+}
 void stop()
 {
      digitalWrite(speedpinA,LOW);// Unenble the pin, to stop the motor. this should be done to avid damaging the motor. 
@@ -72,8 +78,13 @@ void loop()
   stop();
   delay(2000);
 
-  left();
   forward();
+  delay(1000);
+  right();
+  delay(1000);
+  left();
+  delay(1000);
+  straight();
   delay(2000);
 
   stop();
@@ -83,6 +94,4 @@ void loop()
   backward();
   delay(2000);
 
-  stop();
-  delay(2000);
 }
