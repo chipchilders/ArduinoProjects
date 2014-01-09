@@ -17,17 +17,19 @@
 //  License along with this library; if not, write to the Free Software
 //  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-int pinI1=8;//define I1 interface
-int pinI2=11;//define I2 interface 
-int speedpinA=9;//enable motor A
-int pinI3=12;//define I3 interface 
-int pinI4=13;//define I4 interface 
-int speedpinB=10;//enable motor B
-int spead =255;//define the spead of motor
-int turnspeed =255;
+const int pinI1=8;//define I1 interface
+const int pinI2=11;//define I2 interface 
+const int speedpinA=9;//enable motor A
+const int pinI3=12;//define I3 interface 
+const int pinI4=13;//define I4 interface 
+const int speedpinB=10;//enable motor B
+const int spead =255;//define the spead of motor
+const int turnspeed =255;
+const int pingPin = 3;
  
 void setup()
 {
+  Serial.begin(9600);
   pinMode(pinI1,OUTPUT);
   pinMode(pinI2,OUTPUT);
   pinMode(speedpinA,OUTPUT);
@@ -73,25 +75,55 @@ void stop()
      delay(1000);
 }
 
+long microsecondsToInches(long microseconds)
+{
+  // According to Parallax's datasheet for the PING))), there are
+  // 73.746 microseconds per inch (i.e. sound travels at 1130 feet per
+  // second).  This gives the distance travelled by the ping, outbound
+  // and return, so we divide by 2 to get the distance of the obstacle.
+  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
+  return microseconds / 74 / 2;
+}
+
+long microsecondsToCentimeters(long microseconds)
+{
+  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
+  // The ping travels out and back, so to find the distance of the
+  // object we take half of the distance travelled.
+  return microseconds / 29 / 2;
+}
+
 void loop()
 {
-  stop();
-  delay(2000);
+  long duration, inches, cm;
 
-  forward();
-  delay(1000);
-  right();
-  delay(1000);
-  left();
-  delay(1000);
-  straight();
-  delay(2000);
+  // Activate PING)))
+  pinMode(pingPin, OUTPUT);
+  digitalWrite(pingPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pingPin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(pingPin, LOW);
 
-  stop();
-  delay(2000);
+  pinMode(pingPin, INPUT);
+  duration = pulseIn(pingPin, HIGH);
 
-  right();
-  backward();
-  delay(2000);
+  inches = microsecondsToInches(duration);
 
+  Serial.print(inches);
+  Serial.print("in, ");
+  Serial.println();
+
+  if (inches>6){
+    forward();
+  } else {
+    stop();
+    delay(2000);
+    right();
+    backward();
+    delay(2000);
+    straight();
+    delay(500);
+    stop();
+  }
 }
