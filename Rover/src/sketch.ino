@@ -1,78 +1,137 @@
-//. Motor driver shield- 2012 Copyright (c) Seeed Technology Inc.
-// 
-//  Original Author: Jimbo.we
-//  Contribution: LG
-//  
-//  This library is free software; you can redistribute it and/or
-//  modify it under the terms of the GNU Lesser General Public
-//  License as published by the Free Software Foundation; either
-//  version 2.1 of the License, or (at your option) any later version.
-//
-//  This library is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-//  Lesser General Public License for more details.
-//
-//  You should have received a copy of the GNU Lesser General Public
-//  License along with this library; if not, write to the Free Software
-//  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+#include "FiniteStateMachine.h"
 
+// Turning Motor Pins
 const int pinI1=8;//define I1 interface
 const int pinI2=11;//define I2 interface 
 const int speedpinA=9;//enable motor A
+
+// Drive Motor Pins
 const int pinI3=12;//define I3 interface 
 const int pinI4=13;//define I4 interface 
 const int speedpinB=10;//enable motor B
-const int spead =255;//define the spead of motor
+
+// Motor speed settings
+const int spead =255;
 const int turnspeed =255;
+
+// Sensor Pins
 const int pingPin = 3;
- 
-void setup()
+
+// States
+State stop = State(stopMotion, NULL, NULL);
+State forward = State(moveForward, forwardUpdate, NULL);
+State leftForward = State(moveLeft, NULL, NULL);
+State rightForward = State(moveRight, NULL, NULL);
+State backward = State(moveBackward, NULL, NULL);
+State leftBackward = State(moveBackLeft, backwardUpdate, NULL);
+State rightBackward = State(moveBackRight, NULL, NULL);
+
+// State Machine Setup
+FSM motionStateMachine = FSM(stop);
+
+// Sensor last distance
+int distanceInInches = 100;
+
+void stopMotion()
 {
-  Serial.begin(9600);
-  pinMode(pinI1,OUTPUT);
-  pinMode(pinI2,OUTPUT);
-  pinMode(speedpinA,OUTPUT);
-  pinMode(pinI3,OUTPUT);
-  pinMode(pinI4,OUTPUT);
-  pinMode(speedpinB,OUTPUT);
+    straightenTurningMotor();
+    haltDriveMotor();
 }
- 
-void forward()
+void moveForward()
 {
-     analogWrite(speedpinB,spead);
-     digitalWrite(pinI4,HIGH);//turn DC Motor B move clockwise
-     digitalWrite(pinI3,LOW);
+    Serial.println("Transitioning to forward");
+    forwardDriveMotor();
+    straightenTurningMotor();
 }
-void backward()
+void forwardUpdate()
 {
-     analogWrite(speedpinB,spead);
-     digitalWrite(pinI4,LOW);//turn DC Motor B move anticlockwise
-     digitalWrite(pinI3,HIGH);
+    if (distanceInInches<10)
+    {
+        motionStateMachine.transitionTo(leftBackward);
+        Serial.println("Please transition to backward");
+    }
 }
-void left()
+void moveLeft()
 {
-     analogWrite(speedpinA,turnspeed);//input a simulation value to set the speed
-     digitalWrite(pinI2,LOW);//turn DC Motor A move clockwise
-     digitalWrite(pinI1,HIGH);
+    forwardDriveMotor();
+    leftTurningMotor();
 }
-void right()
+void moveRight()
 {
-     analogWrite(speedpinA,spead);//input a simulation value to set the speed
-     digitalWrite(pinI2,HIGH);//turn DC Motor A move clockwise
-     digitalWrite(pinI1,LOW);
+    forwardDriveMotor();
+    rightTurningMotor();
 }
-void straight()
+void moveBackward()
 {
-    analogWrite(speedpinA,spead);//input a simulation value to set the speed
-    digitalWrite(pinI2,LOW);//turn DC Motor A move clockwise
+    backwardDriveMotor();
+    straightenTurningMotor();
+}
+void moveBackLeft()
+{
+    Serial.println("Transitioning to leftBackward");
+    backwardDriveMotor();
+    rightTurningMotor();
+}
+void moveBackRight()
+{
+    backwardDriveMotor();
+    leftTurningMotor();
+}
+void backwardUpdate()
+{
+    if (distanceInInches>30)
+    {
+        motionStateMachine.transitionTo(forward);
+        Serial.println("Please transition to forward.");
+    }
+}
+// Specific Motor Controls
+
+//// Turning Motor Control
+void straightenTurningMotor()
+{
+    analogWrite(speedpinA,spead);
+    digitalWrite(pinI2,LOW);
     digitalWrite(pinI1,LOW);
 }
-void stop()
+
+void leftTurningMotor()
 {
-     digitalWrite(speedpinA,LOW);// Unenble the pin, to stop the motor. this should be done to avid damaging the motor. 
-     digitalWrite(speedpinB,LOW);
-     delay(1000);
+    analogWrite(speedpinA,spead);
+    digitalWrite(pinI2,LOW);
+    digitalWrite(pinI1,HIGH);
+}
+
+void rightTurningMotor()
+{
+    analogWrite(speedpinA,spead);
+    digitalWrite(pinI2,HIGH);
+    digitalWrite(pinI1,LOW);
+}
+
+//// Drive Motor Control
+void haltDriveMotor()
+{
+    analogWrite(speedpinB, 0);
+    digitalWrite(pinI4,LOW);
+    digitalWrite(pinI4,LOW);
+    delay(50);
+}
+
+void forwardDriveMotor()
+{
+    analogWrite(speedpinB,spead);
+    digitalWrite(pinI4,HIGH);
+    digitalWrite(pinI3,LOW);
+    delay(50);
+}
+
+void backwardDriveMotor()
+{
+    analogWrite(speedpinB,spead);
+    digitalWrite(pinI4,LOW);
+    digitalWrite(pinI3,HIGH);
+    delay(50);
 }
 
 long microsecondsToInches(long microseconds)
@@ -93,11 +152,10 @@ long microsecondsToCentimeters(long microseconds)
   return microseconds / 29 / 2;
 }
 
-void loop()
+long getSingleDistance()
 {
-  long duration, inches, cm;
-
   // Activate PING)))
+  delayMicroseconds(5);
   pinMode(pingPin, OUTPUT);
   digitalWrite(pingPin, LOW);
   delayMicroseconds(2);
@@ -106,24 +164,53 @@ void loop()
   digitalWrite(pingPin, LOW);
 
   pinMode(pingPin, INPUT);
-  duration = pulseIn(pingPin, HIGH);
+  long duration = pulseIn(pingPin, HIGH);
 
-  inches = microsecondsToInches(duration);
+  return microsecondsToInches(duration);
+}
 
-  Serial.print(inches);
-  Serial.print("in, ");
+long frontDistance()
+{
+
+  long firstReading = getSingleDistance();
+  long secondReading = getSingleDistance();
+  long averageReading = (firstReading+secondReading)/2;
+  Serial.print("First Reading: ");
+  Serial.print(firstReading);
+  Serial.print("in, Second Reading: ");
+  Serial.print(secondReading);
+  Serial.print("in, Using: ");
+  Serial.print(averageReading);
+  Serial.print("in.");
   Serial.println();
+  return averageReading;
+}
 
-  if (inches>6){
-    forward();
-  } else {
-    stop();
-    delay(2000);
-    right();
-    backward();
-    delay(2000);
-    straight();
-    delay(500);
-    stop();
-  }
+void setup()
+{
+  Serial.begin(9600);
+
+  // Setup turning motor pins
+  pinMode(pinI1,OUTPUT);
+  pinMode(pinI2,OUTPUT);
+  pinMode(speedpinA,OUTPUT);
+
+  // Setup drive motor pins
+  pinMode(pinI3,OUTPUT);
+  pinMode(pinI4,OUTPUT);
+  pinMode(speedpinB,OUTPUT);
+
+  delay(5000);
+
+  motionStateMachine.transitionTo(forward);
+  motionStateMachine.update();
+}
+
+void loop()
+{
+  distanceInInches = frontDistance();
+  Serial.print("Distance: ");
+  Serial.print(distanceInInches);
+  Serial.println();
+  motionStateMachine.update();
 }
