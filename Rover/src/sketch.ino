@@ -1,4 +1,5 @@
 #include "FiniteStateMachine.h"
+#include <Servo.h>
 
 // Turning Motor Pins
 const int pinI1=8;//define I1 interface
@@ -11,20 +12,21 @@ const int pinI4=13;//define I4 interface
 const int speedpinB=10;//enable motor B
 
 // Motor speed settings
-const int spead =255;
-const int turnspeed =255;
+const int speed = 240;
 
 // Sensor Pins
 const int pingPin = 3;
 
+// Servo Pins
+Servo frontServo;
+int frontServoPin = 5;
+
 // States
 State stop = State(stopMotion, NULL, NULL);
 State forward = State(moveForward, forwardUpdate, NULL);
-State leftForward = State(moveLeft, NULL, NULL);
-State rightForward = State(moveRight, NULL, NULL);
+State left = State(moveLeft, NULL, NULL);
+State right = State(moveRight, NULL, NULL);
 State backward = State(moveBackward, NULL, NULL);
-State leftBackward = State(moveBackLeft, backwardUpdate, NULL);
-State rightBackward = State(moveBackRight, NULL, NULL);
 
 // State Machine Setup
 FSM motionStateMachine = FSM(stop);
@@ -34,83 +36,93 @@ int distanceInInches = 100;
 
 void stopMotion()
 {
-    straightenTurningMotor();
-    haltDriveMotor();
+    haltLeftMotors();
+    haltRightMotors();
 }
 void moveForward()
 {
-    Serial.println("Transitioning to forward");
-    forwardDriveMotor();
-    straightenTurningMotor();
+    Serial.println("Moving forward");
+    forwardLeftMotors();
+    forwardRightMotors();
 }
 void forwardUpdate()
 {
-    if (distanceInInches<10)
+    distanceInInches = frontDistance();
+    if (distanceInInches<20)
     {
-        motionStateMachine.transitionTo(leftBackward);
-        Serial.println("Please transition to backward");
+        Serial.println("Stopping to confirm issue");
+        stopMotion();
+        distanceInInches = frontDistance();
+        Serial.println(distanceInInches);
+        frontServo.write(40);
+        delay(1000);
+        Serial.println(frontDistance());
+        frontServo.write(140);
+        delay(1000);
+        Serial.println(frontDistance());
+        frontServo.write(90);
+        delay(1000);
     }
+    while (distanceInInches<20)
+    {
+        Serial.print("Avoiding at ");
+        Serial.print(distanceInInches);
+        Serial.println();
+        Serial.println("Moving right");
+        moveRight();
+        delay(1000);
+        Serial.println("Stopping");
+        stopMotion();
+        delay(1000);
+        distanceInInches = frontDistance();
+        Serial.println(distanceInInches);
+        delay(1000);
+    }
+    moveForward();
+    delay(500);
 }
 void moveLeft()
 {
-    forwardDriveMotor();
-    leftTurningMotor();
+    forwardRightMotors();
+    backwardLeftMotors();
 }
 void moveRight()
 {
-    forwardDriveMotor();
-    rightTurningMotor();
+    forwardLeftMotors();
+    backwardRightMotors();
 }
 void moveBackward()
 {
-    backwardDriveMotor();
-    straightenTurningMotor();
+    backwardRightMotors();
+    backwardLeftMotors();
 }
-void moveBackLeft()
-{
-    Serial.println("Transitioning to leftBackward");
-    backwardDriveMotor();
-    rightTurningMotor();
-}
-void moveBackRight()
-{
-    backwardDriveMotor();
-    leftTurningMotor();
-}
-void backwardUpdate()
-{
-    if (distanceInInches>30)
-    {
-        motionStateMachine.transitionTo(forward);
-        Serial.println("Please transition to forward.");
-    }
-}
-// Specific Motor Controls
 
-//// Turning Motor Control
-void straightenTurningMotor()
+
+// Specific Motor Controls
+//// Left Motor Control
+void haltLeftMotors()
 {
-    analogWrite(speedpinA,spead);
+    analogWrite(speedpinA,speed);
     digitalWrite(pinI2,LOW);
     digitalWrite(pinI1,LOW);
 }
 
-void leftTurningMotor()
+void forwardLeftMotors()
 {
-    analogWrite(speedpinA,spead);
+    analogWrite(speedpinA,speed);
     digitalWrite(pinI2,LOW);
     digitalWrite(pinI1,HIGH);
 }
 
-void rightTurningMotor()
+void backwardLeftMotors()
 {
-    analogWrite(speedpinA,spead);
+    analogWrite(speedpinA,speed);
     digitalWrite(pinI2,HIGH);
     digitalWrite(pinI1,LOW);
 }
 
-//// Drive Motor Control
-void haltDriveMotor()
+//// Right Motor Control
+void haltRightMotors()
 {
     analogWrite(speedpinB, 0);
     digitalWrite(pinI4,LOW);
@@ -118,17 +130,17 @@ void haltDriveMotor()
     delay(50);
 }
 
-void forwardDriveMotor()
+void forwardRightMotors()
 {
-    analogWrite(speedpinB,spead);
+    analogWrite(speedpinB,speed);
     digitalWrite(pinI4,HIGH);
     digitalWrite(pinI3,LOW);
     delay(50);
 }
 
-void backwardDriveMotor()
+void backwardRightMotors()
 {
-    analogWrite(speedpinB,spead);
+    analogWrite(speedpinB,speed);
     digitalWrite(pinI4,LOW);
     digitalWrite(pinI3,HIGH);
     delay(50);
@@ -171,8 +183,8 @@ long getSingleDistance()
 
 long frontDistance()
 {
-
   long firstReading = getSingleDistance();
+  delayMicroseconds(10);
   long secondReading = getSingleDistance();
   long averageReading = (firstReading+secondReading)/2;
   Serial.print("First Reading: ");
@@ -183,12 +195,15 @@ long frontDistance()
   Serial.print(averageReading);
   Serial.print("in.");
   Serial.println();
-  return averageReading;
+  return firstReading;
 }
 
 void setup()
 {
   Serial.begin(9600);
+
+  frontServo.attach(frontServoPin);
+  //frontServo.write(90);
 
   // Setup turning motor pins
   pinMode(pinI1,OUTPUT);
@@ -200,17 +215,17 @@ void setup()
   pinMode(pinI4,OUTPUT);
   pinMode(speedpinB,OUTPUT);
 
+  backwardLeftMotors();
+  forwardRightMotors();
+
   delay(5000);
 
-  motionStateMachine.transitionTo(forward);
-  motionStateMachine.update();
+  //motionStateMachine.transitionTo(forward);
+  //motionStateMachine.update();
 }
 
 void loop()
 {
-  distanceInInches = frontDistance();
-  Serial.print("Distance: ");
-  Serial.print(distanceInInches);
-  Serial.println();
-  motionStateMachine.update();
+    delay(1000);
+  //motionStateMachine.update();
 }
