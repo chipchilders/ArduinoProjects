@@ -1,5 +1,5 @@
 #include "FiniteStateMachine.h"
-#include <Servo.h>
+#include <Wire.h>
 
 // Turning Motor Pins
 const int pinI1=8;//define I1 interface
@@ -12,18 +12,11 @@ const int pinI4=13;//define I4 interface
 const int speedpinB=10;//enable motor B
 
 // Motor speed settings
-const int speed = 240;
-
-// Sensor Pins
-const int pingPin = 3;
-
-// Servo Pins
-Servo frontServo;
-int frontServoPin = 5;
+const int speed = 254;
 
 // States
 State stop = State(stopMotion, NULL, NULL);
-State forward = State(moveForward, forwardUpdate, NULL);
+State forward = State(moveForward, NULL, NULL);
 State left = State(moveLeft, NULL, NULL);
 State right = State(moveRight, NULL, NULL);
 State backward = State(moveBackward, NULL, NULL);
@@ -31,11 +24,16 @@ State backward = State(moveBackward, NULL, NULL);
 // State Machine Setup
 FSM motionStateMachine = FSM(stop);
 
-// Sensor last distance
-int distanceInInches = 100;
+// Communication constants
+const int cmdForward = 1;
+const int cmdBackward = 2;
+const int cmdRight = 3;
+const int cmdLeft = 4;
+const int cmdStop = 0;
 
 void stopMotion()
 {
+    Serial.println("Stopping");
     haltLeftMotors();
     haltRightMotors();
 }
@@ -45,54 +43,21 @@ void moveForward()
     forwardLeftMotors();
     forwardRightMotors();
 }
-void forwardUpdate()
-{
-    distanceInInches = frontDistance();
-    if (distanceInInches<20)
-    {
-        Serial.println("Stopping to confirm issue");
-        stopMotion();
-        distanceInInches = frontDistance();
-        Serial.println(distanceInInches);
-        frontServo.write(40);
-        delay(1000);
-        Serial.println(frontDistance());
-        frontServo.write(140);
-        delay(1000);
-        Serial.println(frontDistance());
-        frontServo.write(90);
-        delay(1000);
-    }
-    while (distanceInInches<20)
-    {
-        Serial.print("Avoiding at ");
-        Serial.print(distanceInInches);
-        Serial.println();
-        Serial.println("Moving right");
-        moveRight();
-        delay(1000);
-        Serial.println("Stopping");
-        stopMotion();
-        delay(1000);
-        distanceInInches = frontDistance();
-        Serial.println(distanceInInches);
-        delay(1000);
-    }
-    moveForward();
-    delay(500);
-}
 void moveLeft()
 {
+    Serial.println("Moving left");
     forwardRightMotors();
     backwardLeftMotors();
 }
 void moveRight()
 {
+    Serial.println("Moving right");
     forwardLeftMotors();
     backwardRightMotors();
 }
 void moveBackward()
 {
+    Serial.println("Moving backward");
     backwardRightMotors();
     backwardLeftMotors();
 }
@@ -146,64 +111,8 @@ void backwardRightMotors()
     delay(50);
 }
 
-long microsecondsToInches(long microseconds)
-{
-  // According to Parallax's datasheet for the PING))), there are
-  // 73.746 microseconds per inch (i.e. sound travels at 1130 feet per
-  // second).  This gives the distance travelled by the ping, outbound
-  // and return, so we divide by 2 to get the distance of the obstacle.
-  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
-  return microseconds / 74 / 2;
-}
-
-long microsecondsToCentimeters(long microseconds)
-{
-  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
-  // The ping travels out and back, so to find the distance of the
-  // object we take half of the distance travelled.
-  return microseconds / 29 / 2;
-}
-
-long getSingleDistance()
-{
-  // Activate PING)))
-  delayMicroseconds(5);
-  pinMode(pingPin, OUTPUT);
-  digitalWrite(pingPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(pingPin, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(pingPin, LOW);
-
-  pinMode(pingPin, INPUT);
-  long duration = pulseIn(pingPin, HIGH);
-
-  return microsecondsToInches(duration);
-}
-
-long frontDistance()
-{
-  long firstReading = getSingleDistance();
-  delayMicroseconds(10);
-  long secondReading = getSingleDistance();
-  long averageReading = (firstReading+secondReading)/2;
-  Serial.print("First Reading: ");
-  Serial.print(firstReading);
-  Serial.print("in, Second Reading: ");
-  Serial.print(secondReading);
-  Serial.print("in, Using: ");
-  Serial.print(averageReading);
-  Serial.print("in.");
-  Serial.println();
-  return firstReading;
-}
-
 void setup()
 {
-  Serial.begin(9600);
-
-  frontServo.attach(frontServoPin);
-  //frontServo.write(90);
 
   // Setup turning motor pins
   pinMode(pinI1,OUTPUT);
@@ -215,17 +124,40 @@ void setup()
   pinMode(pinI4,OUTPUT);
   pinMode(speedpinB,OUTPUT);
 
-  backwardLeftMotors();
-  forwardRightMotors();
+  Wire.begin(4);
+  Wire.onReceive(receiveEvent);
+  Serial.begin(9600);
 
-  delay(5000);
-
-  //motionStateMachine.transitionTo(forward);
-  //motionStateMachine.update();
 }
 
 void loop()
 {
-    delay(1000);
-  //motionStateMachine.update();
+    delay(100);
+}
+
+void receiveEvent(int howMany)
+{
+    Serial.println("got one!");
+  char action;
+
+  while(0 < Wire.available()) // loop through all but the last
+  {
+    action = Wire.read(); // receive byte as a character
+    switch (action) {
+        case cmdForward:
+            motionStateMachine.immediateTransitionTo(forward);
+            break;
+        case cmdBackward:
+            motionStateMachine.immediateTransitionTo(backward);
+            break;
+        case cmdRight:
+            motionStateMachine.immediateTransitionTo(right);
+            break;
+        case cmdLeft:
+            motionStateMachine.immediateTransitionTo(left);
+            break;
+        default:
+            motionStateMachine.immediateTransitionTo(stop);
+    }
+  }
 }
