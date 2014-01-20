@@ -1,3 +1,11 @@
+/*
+
+This sketch is used on the sensor-side arduino, and 
+communicates with the Rover sketch for the drive control
+side.
+
+*/
+
 #include "FiniteStateMachine.h"
 #include <Servo.h>
 #include <Wire.h>
